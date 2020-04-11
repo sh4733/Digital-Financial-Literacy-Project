@@ -1,0 +1,216 @@
+---
+title: "Final Project"
+author: "Soohyun"
+date: "2018/11/05"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(sqldf)
+```
+
+## Final Project Appendix
+
+```{r}
+#omit NA and don't know values
+survey <- read.csv("financial_inclusion.csv", na.strings=c("","NA"))
+survey[survey == "(dk)" | survey == "(DK)" | survey == "(ref)"] <- NA
+
+```
+
+```{r}
+#code factors into integers (for logistic regression)
+survey$account <- as.integer(survey$account == "yes")
+survey$saved <- as.integer(survey$saved == "yes")
+survey$female <- as.integer(survey$female == "Female")
+
+```
+
+*Account Ownership*
+
+```{r}
+gender.acc <- glm(account ~ female, data = survey, family = binomial(link = "logit"), na.action = na.exclude)
+summary(gender.acc)
+```
+
+Running a regression with y as account and x as female did not yield statistically significant results. In fact, putting several other x variables still did not show much variation. Thus I moved on to tabularize data to see how the distribution was like.
+
+```{r}
+table(survey$account)
+```
+
+Indeed, using table() showed that only 41 out of 1000 people did not have bank accounts, which in other words meant that most people owned accounts, whether or not they belonged in supposedly 'marginalized' groups.
+
+```{r}
+table(survey$fin9)
+```
+
+In addition, most of the account holders were also active users, with over 900 of them having deposited money into the account in the past 12 months.
+
+```{r}
+table(survey$account, survey$female)
+```
+
+
+Tabularizing gender and account ownership reaffirmed the absence of significant variation on ownership depending on gender. 22 out of 427 females owned accounts, and this was not much different from the proportion of males with accounts.
+
+*Effect of Education Level on Account Ownership*
+
+However, running a regression with education as x did significantly affect the probability of having an account.
+
+```{r}
+edu.lm <- glm(account ~ educ, data = survey, family = binomial(link = 'logit'), na.action = na.exclude)
+summary(edu.lm)
+
+```
+
+The logistic regression shows that the probability of having an account notably varies depending on one's education level. A person who completed tertiary education has a much  higher chance of having an account at a financial institution than others who have less education. 
+
+```{r}
+#create groups by education level
+primary <- survey[which(survey$educ == "completed primary or less"),]
+secondary <- survey[which(survey$educ == "secondary"),]
+tertiary <- survey[which(survey$educ == "completed tertiary or more"),]
+
+#proportion of account holders by education
+proportion <- c(sum(primary$account == 1)/nrow(primary), sum(secondary$account == 1)/nrow(secondary), sum(tertiary$account == 1)/nrow(tertiary))
+education <- c("Primary", "Secondary", "Tertiary")
+
+educ.account <- data.frame(education, proportion)
+
+#plot the graph
+ggplot(data = educ.account, aes(x = education, y = proportion, fill = education)) + geom_col(width = 0.5) + ylim(0,1) + labs(title = "Proportion of Account Holders by Education Levels", x = "Levels of Education", y ="Proportion of Account Holders") + theme_bw() + scale_fill_discrete(name = "Education")
+
+```
+
+
+*Reasons for remaining unbanked*
+```{r}
+#count no. of yes responses
+far <- nrow(survey[which(survey$fin11a == "yes"),])
+expense <- nrow(survey[which(survey$fin11b == "yes"),])
+noDoc <- nrow(survey[which(survey$fin11c == "yes"),])
+noTrust <- nrow(survey[which(survey$fin11d == "yes"),])
+relig <- nrow(survey[which(survey$fin11e == "yes"),])
+noMoney <- nrow(survey[which(survey$fin11f == "yes"),])
+fam <- nrow(survey[which(survey$fin11g == "yes"),])
+noNeed <- nrow(survey[which(survey$fin11h == "yes"),])
+
+#create dataframe of yes counts by reasons
+reasonCount <- c(far, expense, noDoc, noTrust, relig, noMoney, fam, noNeed)
+reason <- c("Too Far", "Expensive", "No Doc", "Unreliable", "Religion", "No Money to Store", "Family Account", "No Need")
+reason.df <- data.frame(reason, reasonCount)
+
+```
+
+
+```{r}
+ggplot(data = reason.df) + geom_col(aes(x = reason, y = reasonCount), width = 0.45, fill = "orange") + labs(title = "Reasons for Not Having an Account", x = "Reasons", y = "Number of Responses") + theme_bw()
+
+```
+
+Since the survey also had questions that asked about reasons for remaining unbanked, I thought it would be interesting to organize how the distribution worked for this section. This is only an analysis of 41 nonaccount individuals, so is not entirely reliable to represent Korea's actual status quo, but still gave some interesting findings.
+
+
+*Utilizing digital financial services*
+
+In addition to holding accounts at financial institutions, having access to and being knowledgeable of digital financial services has also become vital in expanding financial inclusion. Checking a nation's mobile phone owning proportion is a good start, so I once again tabularized this data.
+
+```{r}
+table(survey$mobileowner)
+```
+
+Korea fares very well in this section; almost all of the respondents own mobile phones. Thus I used a different measure to properly assess usage of fintech services: fin5, whether or not one had actively used internet or mobile banking to do any transactions.
+
+Gender did not affect this measure of financial inclusion either.
+
+```{r}
+
+gender.digi <- glm(fin5 ~ female, data = survey, family = binomial(link = 'logit'), na.action = na.exclude)
+summary(gender.digi)
+
+```
+
+```{r}
+#proportion of ppl using fintech in each education group
+eduDigi <- c(nrow(primary[which(primary$fin5 == "yes"),])/nrow(primary), nrow(secondary[which(secondary$fin5 == "yes"),])/nrow(secondary), nrow(tertiary[which(tertiary$fin5 == "yes"),])/nrow(tertiary))
+
+eduDigi.df <- data.frame(education, eduDigi)
+
+#regression
+edu.digi <- glm(fin5 ~ educ, data = survey, family = binomial(link = 'logit'), na.action = na.exclude)
+summary(edu.digi)
+```
+
+```{r}
+ggplot(data = eduDigi.df, aes(x = education, y = eduDigi, fill = education)) + geom_col(width = 0.5) + labs(title = "Proportion of Fintech Users", x = "Levels of Education", y = "Proportion of Fintech Users") + scale_colour_identity(name = "Education") + theme_bw()
+
+```
+
+On the other hand, fintech usage depended greatly on education - in fact, there was a much larger disparity between education levels. People who only received primary education lagged far behind the other two groups in making use of fintech services to manage their finances.
+
+```{r}
+digital.f <- glm(fin5 ~ age, data = survey, family = binomial(link = 'logit'), na.action = na.exclude)
+summary(digital.f)
+```
+
+```{r}
+survey$fin5 <- as.integer(survey$fin5 == "yes")
+ggplot(data = survey, aes(x = age, y = fin5)) + geom_smooth(method = "glm", method.args = list(family = "binomial")) + labs(title = "Effect of Age on Probability of Using Mobile/Internet Banking", x = "Age", y = "Probability of Using Mobile/Internet Banking") + theme_bw()
+
+```
+
+Age was one variable that affected this probability; increasing age meant lower probability of having used fintech in the past.
+
+*What does saving depend on?*
+
+Along with financial services and infrastructure availabe, savings is a crucial section in evaluating financial inclusion status, as it represents one's financial resilience and 'smart' money management strategies.
+
+I attempted to see how employment status and age affected saving.
+
+```{r}
+#employment and age on saving
+emp.lm <- glm(saved ~ age + emp_in + age*emp_in, data = survey, family = binomial(link = "logit"), na.action = na.exclude)
+summary(emp.lm)
+
+```
+
+```{r}
+
+ggplot(data = survey, aes(x = age, y = saved, colour = emp_in)) + geom_smooth(method = "glm", method.args = list(family = "binomial")) + labs(title = "Effect of Age on Saving Habit", x = "Age", y = "Probability of Saving in Past 12 Months") + theme_bw() + scale_color_discrete(name = "Employment")
+
+```
+
+```{r}
+#sort by income levels
+Lowest <- survey[which(survey$inc_q == "Poorest 20%"),]
+Fourth <- survey[which(survey$inc_q == "Fourth 20%"),]
+Middle <- survey[which(survey$inc_q == "Middle 20%"),]
+Second <- survey[which(survey$inc_q == "Second 20%"),]
+Top <- survey[which(survey$inc_q == "Richest 20%"),]
+
+#proportion of ppl who save in each income group
+Proportion <- c(sum(Lowest$saved == 1)/nrow(Lowest), sum(Fourth$saved == 1)/nrow(Fourth), sum(Middle$saved == 1)/nrow(Middle), sum(Second$saved == 1)/nrow(Second), sum(Top$saved == 1)/nrow(Top))
+inc.labels <- c("1st", "2nd", "3rd", "4th", "5th")
+
+#dataframe
+income.df <- data.frame(inc.labels, Proportion)
+
+#regression for income levels
+income.lm <- glm(saved ~ inc_q, data = survey, family = binomial(link = 'logit'), na.action = na.exclude)
+summary(income.lm)
+
+```
+
+```{r}
+
+ggplot(data = income.df, aes(x = inc.labels, y = Proportion, fill = inc.labels)) + geom_col(width = 0.4) + labs(title = "Proportion of People who Save", x ="Income Quintile", y = "Proportion of People Who Save") + theme_bw() + scale_color_discrete()
+
+```
+
